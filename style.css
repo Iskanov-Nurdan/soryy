@@ -1,0 +1,392 @@
+/* ==========================================================================
+   Прости меня — стили
+   Уровень грусти хранится в [data-level] на <body> (0…5), всё остальное —
+   производные от него.
+   ========================================================================== */
+
+:root {
+  /* палитра */
+  --c-bg-top: #ffd9a8;
+  --c-bg-bottom: #ffb4b4;
+  --c-card: #fffaf3;
+  --c-ink: #4a3b34;
+  --c-ink-soft: #8a7568;
+  --c-tear: #7ec8f5;
+  --c-yes: #ffb800;
+  --c-yes-ink: #3d2c00;
+  --c-no: #e8ded6;
+  --c-no-ink: #6b5a50;
+  --c-frame: #ffffff;
+
+  /* производные от уровня грусти */
+  --sad: 0;        /* 0…1 — насколько всё плохо */
+  --shake: 0px;
+
+  --radius: 26px;
+  --shadow-soft: 0 18px 40px rgba(120, 70, 50, .18);
+  --ease-bounce: cubic-bezier(.34, 1.56, .64, 1);
+}
+
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  padding: clamp(12px, 4vw, 32px);
+  display: grid;
+  place-items: center;
+  font-family: "Segoe UI", "Trebuchet MS", system-ui, -apple-system, sans-serif;
+  color: var(--c-ink);
+  background: linear-gradient(160deg, var(--c-bg-top), var(--c-bg-bottom));
+  overflow-x: hidden;
+  transition: background 900ms ease;
+}
+
+/* --- уровни грусти: перекрашиваем мир --------------------------------- */
+
+body[data-level="1"] { --sad: .2; --c-bg-top: #ffcf9c; --c-bg-bottom: #f7a7ae; }
+body[data-level="2"] { --sad: .4; --c-bg-top: #e9c3a6; --c-bg-bottom: #d99aae; }
+body[data-level="3"] { --sad: .6; --c-bg-top: #b9aec2; --c-bg-bottom: #8f8aba; --shake: 1px; }
+body[data-level="4"] { --sad: .8; --c-bg-top: #8b8aa8; --c-bg-bottom: #5f6494; --shake: 2px; }
+body[data-level="5"] { --sad: 1;  --c-bg-top: #5c5f80; --c-bg-bottom: #3a3f63; --shake: 4px; }
+
+body[data-level="3"],
+body[data-level="4"],
+body[data-level="5"] {
+  --c-card: #f4eff2;
+  --c-ink: #3b3348;
+  --c-ink-soft: #7d7290;
+  --c-frame: #eae4ee;
+}
+
+/* прощение */
+body[data-forgiven="true"] {
+  --sad: 0;
+  --shake: 0px;
+  --c-bg-top: #ffe9a8;
+  --c-bg-bottom: #ffc0d4;
+  --c-card: #fffaf3;
+  --c-ink: #4a3b34;
+  --c-ink-soft: #8a7568;
+  --c-frame: #ffffff;
+}
+
+/* --- карточка ---------------------------------------------------------- */
+
+.card {
+  width: min(100%, 440px);
+  padding: clamp(14px, 4vw, 22px) clamp(14px, 4vw, 22px) clamp(18px, 4vw, 26px);
+  text-align: center;
+  background: var(--c-card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  z-index: 2;
+  transition: background 900ms ease, color 900ms ease;
+}
+
+/* --- фото -------------------------------------------------------------- */
+
+.photo {
+  margin: 0;
+  animation: catBreathe 4s ease-in-out infinite;
+}
+
+.photo-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  background: var(--c-frame);
+  box-shadow: 0 8px 22px rgba(90, 60, 45, .16);
+  animation: catTremble 220ms linear infinite;
+  transition: background 900ms ease;
+}
+
+.photo-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 400ms ease, filter 900ms ease;
+  /* с уровнем грусти картинка холоднее и темнее */
+  filter:
+    saturate(calc(1 - var(--sad) * .45))
+    brightness(calc(1 - var(--sad) * .22))
+    contrast(calc(1 + var(--sad) * .08));
+}
+
+.photo-img.is-ready { opacity: 1; }
+
+/* заглушка, пока фоток нет */
+.photo-empty {
+  display: none;
+  margin: 0;
+  padding: 34px 18px;
+  min-height: 220px;
+  align-content: center;
+  font-size: .9rem;
+  line-height: 1.6;
+  color: var(--c-ink-soft);
+  border: 2px dashed currentColor;
+  border-radius: 20px;
+}
+
+.photo-empty code {
+  padding: 2px 7px;
+  font-size: .95em;
+  background: rgba(0, 0, 0, .07);
+  border-radius: 6px;
+}
+
+.photo-frame.is-empty .photo-empty { display: grid; }
+.photo-frame.is-empty .photo-img   { display: none; }
+
+/* --- слёзы поверх фото -------------------------------------------------- */
+
+.tears {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.tear {
+  position: absolute;
+  top: var(--y, 46%);
+  left: var(--x, 36%);
+  width: var(--size, 12px);
+  height: calc(var(--size, 12px) * 1.35);
+  background: linear-gradient(180deg, rgba(210, 240, 255, .95), var(--c-tear));
+  border-radius: 50% 50% 50% 50% / 62% 62% 38% 38%;
+  box-shadow: inset 2px -2px 3px rgba(255, 255, 255, .85),
+              0 0 6px rgba(126, 200, 245, .6);
+  opacity: 0;
+  animation: tearFall var(--dur, 1s) ease-in forwards;
+}
+
+.tear::before {
+  content: "";
+  position: absolute;
+  inset: auto 50% 100% auto;
+  width: 2px;
+  height: calc(var(--size, 12px) * .6);
+  transform: translateX(50%);
+  background: linear-gradient(180deg, transparent, var(--c-tear));
+  border-radius: 2px;
+}
+
+/* --- текст под фото ----------------------------------------------------- */
+
+.word {
+  margin: clamp(14px, 4vw, 20px) 0 4px;
+  font-size: clamp(1.6rem, 8vw, 2.4rem);
+  font-weight: 800;
+  letter-spacing: .04em;
+  line-height: 1.1;
+  text-transform: uppercase;
+  animation: wordPop 380ms var(--ease-bounce);
+}
+
+.subword {
+  margin: 0 0 12px;
+  font-size: clamp(.9rem, 3.6vw, 1.02rem);
+  color: var(--c-ink-soft);
+  animation: wordPop 420ms var(--ease-bounce);
+}
+
+.counter {
+  margin: 0 0 14px;
+  font-size: .8rem;
+  color: var(--c-ink-soft);
+}
+
+.counter-value { font-weight: 700; }
+
+/* --- кнопки ------------------------------------------------------------- */
+
+.actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  min-height: 60px;
+}
+
+.btn {
+  padding: 14px 26px;
+  font: inherit;
+  font-weight: 700;
+  color: var(--c-yes-ink);
+  background: var(--c-yes);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 6px 0 rgba(0, 0, 0, .12);
+  transition: transform 260ms var(--ease-bounce), box-shadow 200ms ease,
+              opacity 300ms ease, background 300ms ease;
+}
+
+.btn:hover  { transform: translateY(-2px); }
+.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0, 0, 0, .12); }
+
+.btn:focus-visible {
+  outline: 3px solid var(--c-ink);
+  outline-offset: 3px;
+}
+
+/* «Прощаю» растёт с каждым отказом */
+.btn--yes {
+  transform: scale(calc(1 + var(--sad) * .35));
+  animation: yesPulse 2.4s ease-in-out infinite;
+}
+.btn--yes:hover { transform: scale(calc(1.05 + var(--sad) * .35)); }
+
+/* «Нет» вянет */
+.btn--no {
+  color: var(--c-no-ink);
+  background: var(--c-no);
+  transform: scale(calc(1 - var(--sad) * .38));
+  opacity: calc(1 - var(--sad) * .45);
+}
+.btn--no:hover { transform: scale(calc(1.02 - var(--sad) * .38)); }
+
+/* --- погода: 0 ясно · 1 дождь · 2 гроза ---------------------------------- */
+
+.rain {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0;
+  background-image:
+    repeating-linear-gradient(105deg, rgba(255, 255, 255, .35) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(102deg, rgba(255, 255, 255, .18) 0 1px, transparent 1px 15px);
+  background-size: 100% 140px, 100% 200px;
+  transition: opacity 900ms ease;
+}
+
+/* дождь — на средней фотке */
+body[data-level="2"] .rain { opacity: .38; animation: rainFall 700ms linear infinite; }
+body[data-level="3"] .rain { opacity: .6;  animation: rainFall 460ms linear infinite; }
+
+/* гроза — на последней фотке: ливень стеной, почти вертикальный */
+body[data-weather="2"] .rain {
+  background-image:
+    repeating-linear-gradient(97deg, rgba(255, 255, 255, .5) 0 2px, transparent 2px 8px),
+    repeating-linear-gradient(94deg, rgba(255, 255, 255, .28) 0 1px, transparent 1px 13px);
+}
+
+body[data-level="4"] .rain { opacity: .8; animation: rainFall 280ms linear infinite; }
+body[data-level="5"] .rain { opacity: 1;  animation: rainFall 170ms linear infinite; }
+
+/* вспышка молнии — класс is-flash вешает JS в случайные моменты */
+.lightning {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    radial-gradient(ellipse at 50% -10%, rgba(255, 255, 255, .95), rgba(210, 225, 255, .55) 45%, transparent 70%);
+}
+
+body.is-flash .lightning { animation: bolt 750ms ease-out; }
+body.is-flash .card      { animation: thunderShake 750ms ease-out; }
+
+/* гроза давит на карточку — тени резче */
+body[data-weather="2"] .card {
+  box-shadow: 0 22px 50px rgba(0, 0, 0, .45);
+}
+
+/* --- финал -------------------------------------------------------------- */
+
+body[data-forgiven="true"] .actions,
+body[data-forgiven="true"] .counter { display: none; }
+
+body[data-forgiven="true"] .photo-frame { animation: catHappy 700ms var(--ease-bounce) 2; }
+
+/* --- анимации ------------------------------------------------------------ */
+
+@keyframes tearFall {
+  0%   { opacity: 0; transform: translateY(0) scale(.5); }
+  15%  { opacity: 1; transform: translateY(6px) scale(1); }
+  100% { opacity: 0; transform: translateY(60px) scale(1.15); }
+}
+
+@keyframes catBreathe {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-4px) scale(1.012); }
+}
+
+@keyframes catTremble {
+  0%   { transform: translate(0, 0); }
+  25%  { transform: translate(var(--shake), calc(var(--shake) * -1)); }
+  50%  { transform: translate(calc(var(--shake) * -1), var(--shake)); }
+  75%  { transform: translate(calc(var(--shake) * .6), var(--shake)); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes catHappy {
+  0%   { transform: scale(1) rotate(0deg); }
+  30%  { transform: scale(1.04) rotate(-2deg); }
+  60%  { transform: scale(1.04) rotate(2deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes wordPop {
+  from { opacity: 0; transform: translateY(8px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes yesPulse {
+  0%, 100% { box-shadow: 0 6px 0 rgba(0, 0, 0, .12); }
+  50%      { box-shadow: 0 6px 0 rgba(0, 0, 0, .12), 0 0 0 12px rgba(255, 184, 0, .18); }
+}
+
+@keyframes rainFall {
+  from { background-position: 0 0, 0 0; }
+  to   { background-position: 0 140px, 0 200px; }
+}
+
+/* двойная вспышка, как у настоящей молнии */
+@keyframes bolt {
+  0%   { opacity: 0; }
+  4%   { opacity: 1; }
+  10%  { opacity: .1; }
+  16%  { opacity: .92; }
+  26%  { opacity: .05; }
+  34%  { opacity: .6; }
+  100% { opacity: 0; }
+}
+
+@keyframes thunderShake {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  12%      { transform: translate(-4px, 2px) rotate(-.5deg); }
+  26%      { transform: translate(4px, -2px) rotate(.5deg); }
+  40%      { transform: translate(-3px, 1px) rotate(-.3deg); }
+  56%      { transform: translate(2px, -1px) rotate(.2deg); }
+  72%      { transform: translate(-1px, 1px) rotate(0deg); }
+}
+
+/* --- уважение к настройкам пользователя ---------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+  .photo,
+  .photo-frame,
+  .rain,
+  .lightning,
+  .card,
+  .btn--yes,
+  .word,
+  .subword {
+    animation: none !important;
+  }
+  .tear { animation-duration: 1ms; }
+  * { transition-duration: 1ms !important; }
+}
