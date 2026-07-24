@@ -1,21 +1,50 @@
 /* ==========================================================================
    POST /api/notify — «тебя простили»
 
-   Serverless-функция Vercel. Шлёт уведомление туда, что настроено
-   переменными окружения (можно сразу в оба места):
+   Serverless-функция Vercel. Минимум для работы — один токен бота:
 
-     TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID   — телеграм
-     DISCORD_WEBHOOK_URL                     — дискорд
+     TELEGRAM_BOT_TOKEN   — токен от @BotFather
+
+   Кому слать, функция определит сама: возьмёт чат того, кто первым написал
+   боту (нажал Start). Но лучше задать явно — надёжнее:
+
+     TELEGRAM_CHAT_ID     — твой id, узнать у @userinfobot
 
    Необязательные:
-     NOTIFY_TZ    — часовой пояс для времени в сообщении (по умолчанию Asia/Almaty)
-     ALLOW_ORIGIN — хост, с которого разрешены запросы (по умолчанию — свой же)
+     DISCORD_WEBHOOK_URL  — продублировать уведомление в дискорд
+     NOTIFY_TZ            — часовой пояс времени в сообщении (по умолчанию Asia/Almaty)
+     ALLOW_ORIGIN         — хост, с которого разрешены запросы (по умолчанию свой же)
 
    Секреты живут только в Vercel → Settings → Environment Variables.
    В код их не класть никогда.
    ========================================================================== */
 
 'use strict';
+
+/* ==========================================================================
+   ВАРИАНТ БЕЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ
+
+   Не хочешь возиться с настройками Vercel — просто впиши токен и id сюда.
+   Этот файл выполняется на сервере, в браузер он не попадает, так что для
+   личной странички это нормально.
+
+   Единственное: если выложишь репозиторий на GitHub публично — токен увидят
+   все. Тогда либо репозиторий Private, либо всё-таки переменные окружения.
+   В script.js токен не вставлять никогда — тот файл видно всем.
+
+   Если переменные окружения заданы, они важнее того, что написано здесь.
+   ========================================================================== */
+
+var FALLBACK_BOT_TOKEN = '';   // например '1234567890:AAH...'
+var FALLBACK_CHAT_ID   = '';   // например '123456789', можно оставить пустым
+
+function botToken() {
+  return process.env.TELEGRAM_BOT_TOKEN || FALLBACK_BOT_TOKEN;
+}
+
+function chatIdFromConfig() {
+  return process.env.TELEGRAM_CHAT_ID || FALLBACK_CHAT_ID;
+}
 
 var RATE_LIMIT_MS = 10 * 1000; // не чаще одного уведомления в 10 секунд с IP
 var recent = new Map();        // best-effort, живёт в пределах одного инстанса
@@ -43,12 +72,15 @@ module.exports = async function handler(req, res) {
   var text = buildMessage(payload, req);
 
   var targets = [];
-  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) targets.push('telegram');
+  if (botToken()) targets.push('telegram');
   if (process.env.DISCORD_WEBHOOK_URL) targets.push('discord');
 
   if (targets.length === 0) {
-    console.error('notify: не задана ни одна переменная окружения для отправки');
-    return res.status(501).json({ error: 'Уведомления не настроены' });
+    console.error('notify: нет токена бота — ни в переменных окружения, ни в FALLBACK_BOT_TOKEN');
+    return res.status(501).json({
+      error: 'Уведомления не настроены',
+      reason: 'нет токена бота: задай TELEGRAM_BOT_TOKEN в Vercel или FALLBACK_BOT_TOKEN в api/notify.js'
+    });
   }
 
   var results = await Promise.all(targets.map(function (target) {
@@ -56,7 +88,7 @@ module.exports = async function handler(req, res) {
       function () { return { target: target, ok: true }; },
       function (err) {
         console.error('notify: ' + target + ' — ' + err.message);
-        return { target: target, ok: false };
+        return { target: target, ok: false, reason: err.message };
       }
     );
   }));
@@ -64,7 +96,10 @@ module.exports = async function handler(req, res) {
   var delivered = results.filter(function (r) { return r.ok; });
 
   if (delivered.length === 0) {
-    return res.status(502).json({ error: 'Не удалось отправить уведомление' });
+    return res.status(502).json({
+      error: 'Не удалось отправить уведомление',
+      reason: results[0].reason           // чтобы не лезть в логи при настройке
+    });
   }
 
   return res.status(200).json({
@@ -82,13 +117,13 @@ async function send(target, text) {
 }
 
 async function sendTelegram(text) {
-  var url = 'https://api.telegram.org/bot' + process.env.TELEGRAM_BOT_TOKEN + '/sendMessage';
+  var chatId = await resolveChatId();
 
-  var response = await fetch(url, {
+  var response = await fetch(telegramUrl('sendMessage'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      chat_id: process.env.TELEGRAM_CHAT_ID,
+      chat_id: chatId,
       text: text,
       parse_mode: 'HTML',
       disable_web_page_preview: true
@@ -99,6 +134,36 @@ async function sendTelegram(text) {
     var detail = await response.text();
     throw new Error('telegram ' + response.status + ': ' + detail.slice(0, 200));
   }
+}
+
+function telegramUrl(method) {
+  return 'https://api.telegram.org/bot' + botToken() + '/' + method;
+}
+
+/* Кому слать. Если TELEGRAM_CHAT_ID не задан — спрашиваем у самого телеграма,
+   кто последним писал боту. Так для настройки хватает одного токена. */
+var cachedChatId = null;
+
+async function resolveChatId() {
+  var configured = chatIdFromConfig();
+  if (configured) return configured;
+  if (cachedChatId) return cachedChatId;
+
+  var response = await fetch(telegramUrl('getUpdates') + '?limit=100');
+  if (!response.ok) throw new Error('telegram getUpdates ' + response.status);
+
+  var data = await response.json();
+  var updates = Array.isArray(data.result) ? data.result : [];
+
+  for (var i = updates.length - 1; i >= 0; i--) {
+    var message = updates[i].message || updates[i].edited_message || updates[i].channel_post;
+    if (message && message.chat && message.chat.id) {
+      cachedChatId = String(message.chat.id);
+      return cachedChatId;
+    }
+  }
+
+  throw new Error('не найден получатель: напиши боту /start или задай TELEGRAM_CHAT_ID');
 }
 
 async function sendDiscord(text) {

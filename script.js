@@ -196,8 +196,12 @@
       body: JSON.stringify({ refusals: refusals }),
       keepalive: true                      // долетит, даже если вкладку закроют
     }).then(function (response) {
-      if (!response.ok) throw new Error('HTTP ' + response.status);
-      console.info('Уведомление отправлено');
+      return response.json().catch(function () { return {}; }).then(function (data) {
+        if (!response.ok) {
+          throw new Error(data.reason || data.error || 'HTTP ' + response.status);
+        }
+        console.info('Уведомление отправлено');
+      });
     }).catch(function (err) {
       console.warn('Уведомление не ушло:', err.message);
     });
