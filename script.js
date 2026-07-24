@@ -183,6 +183,26 @@
     flash(); // первая — сразу, чтобы гроза не подкрадывалась
   }
 
+  /* --- уведомление о прощении ------------------------------------------------ */
+
+  /* Дёргает /api/notify — serverless-функцию на Vercel, которая шлёт сообщение
+     в телеграм. Локально (file://) молча падает, и это нормально. */
+  function notifyForgiven() {
+    if (!window.fetch) return;
+
+    window.fetch('/api/notify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refusals: refusals }),
+      keepalive: true                      // долетит, даже если вкладку закроют
+    }).then(function (response) {
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      console.info('Уведомление отправлено');
+    }).catch(function (err) {
+      console.warn('Уведомление не ушло:', err.message);
+    });
+  }
+
   /* --- отрисовка состояния -------------------------------------------------- */
 
   function render() {
@@ -239,6 +259,8 @@
     restartLightning();
     tearsBox.textContent = '';
     showPhoto(alive[PHOTO_YES] ? PHOTO_YES : photoForLevel(0));
+
+    notifyForgiven();
   });
 
   /* --- старт ----------------------------------------------------------------- */
